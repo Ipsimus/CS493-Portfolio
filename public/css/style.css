@@ -1,0 +1,16 @@
+/*
+// Title: 11 Ways to Center Div or Text in Div in CSS
+// Author: Anna Fitzgerald
+// Date: 08/09/2022
+// Date accessed: 11/04/2022
+// URL: https://blog.hubspot.com/website/center-div-css#:~:text=You%20can%20do%20this%20by,the%20div)%20vertically%20and%20horizontally.
+// Notes: To center a div and its content with a yellow border. 
+*/
+.center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    border: 5px solid #FFFF00;
+    padding: 10px;
+}
