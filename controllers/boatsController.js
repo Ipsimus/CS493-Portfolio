@@ -3,6 +3,8 @@ const bodyParser = require('body-parser');
 const router = express.Router();
 const ds = require('../datastore');
 const loadsController = require('./loadsController');
+const authController = require('./authController');
+const { auth } = require('googleapis/build/src/apis/abusiveexperiencereport');
 
 const datastore = ds.datastore;
 const BOAT = "Boat";
@@ -29,7 +31,7 @@ function get_boat(id) {
 /**
  * Puts a boat, if an id isn't provided it generates a boat id from datastore. 
  */
-function put_boat(name, type, length, loads=[], owner, id=null){
+function put_boat(name, type, length, loads=[], ownerId, id=null){
     
     let key;
 
@@ -40,7 +42,7 @@ function put_boat(name, type, length, loads=[], owner, id=null){
         key = datastore.key([BOAT, parseInt(id, 10)]);
     }
     
-	const new_boat = {"name": name, "type": type, "length": length, "loads": loads, "owner": owner};
+	const new_boat = {"name": name, "type": type, "length": length, "loads": loads, "owner_id": ownerId};
 	return datastore.save({"key":key, "data":new_boat}).then(() => {return key});
 }
 
@@ -57,7 +59,7 @@ async function remove_load(boat, load){
         }
     }
 
-    return await put_boat(boat.name, boat.type, boat.length, new_loads, boat.owner, boat.id);
+    return await put_boat(boat.name, boat.type, boat.length, new_loads, boat.owner_id, boat.id);
 }
 
 /**
@@ -107,15 +109,42 @@ function delete_boat(id){
 });
 
 /**
- * Gets a Boat with given ID. */
- router.get('/:boat_id', function (req, res){
-    console.log("Entered the route.");
+ * Gets a Boat with given ID. -- Done*/
+ router.get('/:boat_id', async function (req, res){
+
+    // Checks to see if client can accept JSON as a response.
+    const accepts = req.accepts('application/json');
+    if(!accepts){
+        return res.status(406).json({"Error": "Not Acceptable"});
+    }
+
+    // Check for authorization header
+    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
+        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
+    }
+
+    // Split makes an array of the words bearer and the tokenId itself. 
+    const tokenId = req.headers.authorization.split(" ")[1];
+
+    let [isValid, ownerId, errorMessage] = await authController.verify(tokenId);
+
+    // A failed verification will return 401 status and the error message.
+    if(!isValid){
+        return res.status(401).json( {"Error": errorMessage} );
+    }
+    
     get_boat(req.params.boat_id)
     .then(boat => {
         if (boat[0] === undefined || boat[0] === null) {
             // The 0th element is undefined. This means there is no boat with this id
             res.status(404).json({ 'Error': 'No boat with this boat_id exists' });
-        } else {
+        } 
+        else {
+
+            // Prevents One user from accessing another user's boat. -- Implement in Postman
+            if(boat[0]?.owner_id !== ownerId){
+                return res.status(403).json({ 'Error': 'Forbidden Access!' });
+            }
             // Return the 0th element which is the boat with this id
             // Also creates self link when responding to client. 
             boat[0].self = req.protocol + "://" + req.get('host') + req.baseUrl + "/" + req.params.boat_id;
@@ -161,23 +190,39 @@ function delete_boat(id){
 });
 
 /**
- * Add a Boat */ 
-router.post('/', function(req, res){
+ * Add a Boat -- Done*/ 
+router.post('/', async function(req, res){
 
     let loadsArr = [];
 
-    if(req.body?.name === undefined || req.body?.type === undefined || req.body?.length === undefined){
-        return res.status(400).json( {"Error": "The request object is missing at least one of the required attributes"});
+    // Checks to see if client can accept JSON as a response.
+    const accepts = req.accepts('application/json');
+    if(!accepts){
+        return res.status(406).json({"Error": "Not Acceptable"});
     }
 
-    if(req.body?.loads === undefined || req.body?.loads.length <= 0){
-        loadsArr = [];
-    }
-    else{
-        loadsArr = req.body.loads;
+    // Check for authorization header
+    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
+        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
     }
 
-    put_boat(req.body.name, req.body.type, req.body.length, loadsArr)
+    if(
+        req.body?.name === undefined || req.body?.type === undefined || req.body?.length === undefined ||
+        req.body?.name === null || req.body?.type === null || req.body?.length === null){
+            return res.status(400).json( {"Error": "The request object is missing at least one of the required attributes"});
+    }
+
+    // Split makes an array of the words bearer and the tokenId itself. 
+    const tokenId = req.headers.authorization.split(" ")[1];
+
+    let [isValid, ownerId, errorMessage] = await authController.verify(tokenId);
+
+    // A failed verification will return 401 status and the error message.
+    if(!isValid){
+        return res.status(401).json( {"Error": errorMessage} );
+    }
+
+    put_boat(req.body.name, req.body.type, req.body.length, loadsArr, ownerId)
     .then( key => {res.status(201)
         .send({
             "id": key.id,
@@ -185,7 +230,7 @@ router.post('/', function(req, res){
             "name": req.body.name,
             "length": req.body.length,
             "loads": loadsArr,
-            "owner": req.body.owner,
+            "owner_id": ownerId,
             "self": req.protocol + "://" + req.get('host') + req.baseUrl + "/" + key.id
         })
     });
@@ -227,7 +272,7 @@ router.post('/', function(req, res){
 
             Promise.all([
                 loadsController.put_load(load[0].volume, load[0].item, load[0].creation_date, load[0].carrier, req.params.load_id),
-                put_boat(boat[0].name, boat[0].type, boat[0].length, boat[0].loads, boat[0].owner, req.params.boat_id)
+                put_boat(boat[0].name, boat[0].type, boat[0].length, boat[0].loads, boat[0].owner_id, req.params.boat_id)
             ])
             // res.status(204).send(), if send() is not used, a connection error occurs.
             .then(res.status(204).send());
@@ -239,6 +284,21 @@ router.post('/', function(req, res){
  * Remove a Load.
  */
 router.delete('/:boat_id/loads/:load_id', async function(req, res){ 
+
+    // Check for authorization header
+    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
+        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
+    }
+
+    // Split makes an array of the words bearer and the tokenId itself. 
+    const tokenId = req.headers.authorization.split(" ")[1];
+
+    let [isValid, ownerId, errorMessage] = await authController.verify(tokenId);
+
+    // A failed verification will return 401 status and the error message.
+    if(!isValid){
+        return res.status(401).json( {"Error": errorMessage} );
+    }
     
     // Get boat and load based on their respective ids. 
     const [boat, load] = await Promise.all([
@@ -257,6 +317,9 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
         return;
     }
 
+    // Prevents One user from accessing another user's boat. -- Implement in Postman
+    
+
     // Remove load from boat, and carrier from load. 
     
     await remove_load(boat[0], load[0]),
@@ -271,6 +334,21 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
  * Delete a Boat.
  */
  router.delete('/:boat_id', async function(req, res){ 
+
+    // Check for authorization header
+    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
+        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
+    }
+
+    // Split makes an array of the words bearer and the tokenId itself. 
+    const tokenId = req.headers.authorization.split(" ")[1];
+
+    let [isValid, ownerId, errorMessage] = await authController.verify(tokenId);
+
+    // A failed verification will return 401 status and the error message.
+    if(!isValid){
+        return res.status(401).json( {"Error": errorMessage} );
+    }
     
     // Get boat and load based on their respective ids. 
     const boat = await get_boat(req.params.boat_id);
@@ -279,6 +357,11 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
     if(boat[0]?.id === undefined || boat[0]?.id === null){
         res.status(404).json({"Error": "No boat with this boat_id exists"});
         return;
+    }
+
+    // Prevents One user from accessing another user's boat. -- Implement in Postman
+    if(boat[0]?.owner_id !== ownerId){
+        return res.status(403).json({ 'Error': 'Forbidden Access!' });
     }
     
     // Remove carrier from every load that the boat holds. 
@@ -289,9 +372,7 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
     // Delete Boat from Datastore.
     await delete_boat(boat[0].id);
 
-    // Remove load from boat, and carrier from load. 
     res.status(204).send()
-
 });
 
 /* ------------- End Controller Functions ------------- */

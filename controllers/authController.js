@@ -52,9 +52,9 @@ const client = new OAuth2Client(clientID)
 
 /**
  * Creates a entity of type KIND which stores the user_id.*/
- function post_user(user_id) {
+ function post_user(firstName, lastName, ownerId) {
   var key = datastore.key(KIND);
-  const data = { "user_id": user_id };
+  const data = { "first_name": firstName, "last_name": lastName, "owner_id": ownerId };
   return datastore.save({ "key": key, "data": data }).then(() => { return key });
 }
 
@@ -75,6 +75,10 @@ function get_all_users() {
 function delete_state(id) {
 const key = datastore.key([KIND, parseInt(id, 10)]);
 return datastore.delete(key);
+}
+
+async function get_user(google_id){
+
 }
 
 // ******************** Verify ID Token Functions ********************
@@ -219,13 +223,25 @@ router.get('/profile', async (req, res) => {
 
   // Get token verification complete. 
   let [isValid, userId, errorMessage] = await verify(jwtValue);
+  let userInDatastore = false;
 
   if(!isValid){
     console.log(errorMessage);
   }
   else{
+
+    // Check for user in datastore to prevent duplicate entries. 
+    const allUsers = await get_all_users()
+
+    for(const user of allUsers){
+      if(user.owner_id === userId){
+        userInDatastore = true;
+      }
+    }
     // Store the userID in datastore entity 'User'
-    await post_user(userId);
+    if(userInDatastore === false){
+      await post_user(response?.data.names[0]?.givenName, response?.data.names[0]?.familyName, userId);
+    }
   }
 
   // Display User info.
@@ -240,3 +256,6 @@ router.get('/profile', async (req, res) => {
 })
 
 module.exports = router;
+
+module.exports.get_all_users = get_all_users;
+module.exports.verify = verify;
