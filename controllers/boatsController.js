@@ -237,6 +237,105 @@ router.post('/', async function(req, res){
 });
 
 /**
+ * A Boat is Patched -- Done
+ */
+router.patch('/:boat_id', async function (req, res){
+
+    // Checks to see if client can accept JSON as a response.
+    const accepts = req.accepts('application/json');
+    if(!accepts){
+        return res.status(406).json({"Error": "Not Acceptable"});
+    }
+
+    // Check for authorization header
+    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
+        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
+    }
+
+    let attributeNum = 0;
+    let [name, type, length] = [null, null, null];
+
+    // Getting the name if not undefined or null
+    if(req.body?.name !== undefined && req.body?.name !== null){
+        name = req.body.name;
+        attributeNum++;
+    }
+
+    // Getting the type if not undefined or null
+    if(req.body?.type !== undefined && req.body?.type !== null){
+        type = req.body.type;
+        attributeNum++;
+    }
+
+    // Getting the length if not undefined or null
+    if(req.body?.length !== undefined && req.body?.length !== null){
+        length = req.body.length;
+        attributeNum++;
+    }
+
+    // If no attributes are added, error is returned. 
+    if(attributeNum <= 0){
+        return res.status(400).json( {"Error": "The request object is missing at least one of the required attributes"});
+    }
+
+    // Split makes an array of the words bearer and the tokenId itself. 
+    const tokenId = req.headers.authorization.split(" ")[1];
+
+    const [[isValid, ownerId, errorMessage], requestedBoat] = await Promise.all([authController.verify(tokenId), get_boat(req.params.boat_id)])
+    // A failed verification will return 401 status and the error message.
+    
+    if(!isValid){
+        return res.status(401).json( {"Error": errorMessage} );
+    }
+
+    // check for valid boat. 
+    if (requestedBoat?.[0] === undefined || requestedBoat?.[0] === null){
+
+        // The 0th element is undefined. This means there is no boat with this id
+        return res.status(404).json({ 'Error': 'No boat with this boat_id exists' });
+    } 
+
+    // Prevents One user from accessing another user's boat. -- Implement in Postman
+    if(requestedBoat[0]?.owner_id !== ownerId){
+        return res.status(403).json({ 'Error': 'Forbidden Access!' });
+    }
+
+    const loadsArr = [];
+    
+    // Copy original boat loads
+    for(const load of requestedBoat[0].loads){
+        // !!!!! You need to add a self link to all loads represented !!!!!
+        loadsArr.push(load);
+    }
+
+    // Attributes that are null are replaced by original values. 
+    if(name === null){
+        name = requestedBoat[0].name;
+    }
+    if(type === null){
+        type = requestedBoat[0].type;
+    }
+    if(length === null){
+        length = requestedBoat[0].length;
+    }
+
+    // Patch the boat for all attributes except the loads. 
+    put_boat(name, type, length, loadsArr, ownerId, requestedBoat[0].id)
+    .then( key => {res.status(201)
+        .send({
+            "id": key.id,
+            "name": name,
+            "type": type,
+            "length": length,
+            "loads": loadsArr,
+            "owner_id": ownerId,
+            "self": req.protocol + "://" + req.get('host') + req.baseUrl + "/" + key.id
+        })
+    });
+
+})
+
+/**
  * Load is Assigned to a Boat.
  */
  router.put('/:boat_id/loads/:load_id', async function (req, res){

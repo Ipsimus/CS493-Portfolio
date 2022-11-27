@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const router = express.Router();
 const ds = require('../datastore');
 const boatsController = require('./boatsController');
+const authController = require('./authController');
 
 const datastore = ds.datastore;
 
@@ -12,7 +13,7 @@ const PAGELIMIT = 3;
 router.use(bodyParser.json());
 
 
-/* ------------- Begin guest Model Functions ------------- */
+/* ------------- Begin Datastore Model Functions ------------- */
 
 /**
  * Returns a load with a given id. */
@@ -33,7 +34,7 @@ function get_load(id) {
 /**
  * Puts the load to the Datastore Database. If no id is provided a new
  * load id is generated.  */
-function put_load(volume, item, creation_date, carrier=null, id=null){
+function put_load(volume, item, creation_date, carrier=null, ownerId, id=null){
 
     let key;
 
@@ -44,7 +45,7 @@ function put_load(volume, item, creation_date, carrier=null, id=null){
         key = datastore.key([LOAD, parseInt(id, 10)]);
     }
     
-	const new_load = {"volume": volume, "item": item, "creation_date": creation_date, "carrier": carrier};
+	const new_load = {"volume": volume, "item": item, "creation_date": creation_date, "carrier": carrier, "owner_id": ownerId};
 	return datastore.save({"key":key, "data":new_load}).then(() => {return key});
 }
 
@@ -92,6 +93,44 @@ function delete_load(id){
 
 /* ------------- End Model Functions ------------- */
 
+/**
+ * 
+ * @param req 
+ * @param res 
+ * @returns [bool, null/ownerId] 
+ * If the request is valid an array with index 0 of true is returned, 
+ * along with the ownerId of the validated individual in index 1. 
+ * Otherwise index 0 is false and index 1 is null.
+ */
+async function is_valid_request(req, res){
+
+    // Checks to see if client can accept JSON as a response.
+    const accepts = req.accepts('application/json');
+    if(!accepts){
+        res.status(406).json({"Error": "Not Acceptable"});
+        return [false, null];
+    }
+
+    // Check for authorization header
+    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
+        res.status(401).json( {"Error": "No authorization bearer token was provided!"});
+        return [false, null];
+    }
+
+    // Split makes an array of the words bearer and the tokenId itself. 
+    const tokenId = req.headers.authorization.split(" ")[1];
+
+    const [isValid, ownerId, errorMessage] = await authController.verify(tokenId);
+
+    // A failed verification will return 401 status and the error message.
+    if(!isValid){
+        res.status(401).json( {"Error": errorMessage} );
+        return [false, null]
+    }
+    
+    return [true, ownerId]
+}
+
 /* ------------- Begin Controller Functions ------------- */
 
 /**
@@ -130,13 +169,27 @@ router.get('/', function(req, res){
 
 /**
  * Gets a Load with given ID. */
- router.get('/:id', function (req, res){
+ router.get('/:id', async function (req, res){
+
+    const [is_valid, ownerId] = await is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
+
     get_load(req.params.id)
         .then(load => {
             if (load[0] === undefined || load[0] === null) {
                 // The 0th element is undefined. This means there is no load with this id
                 res.status(404).json({ 'Error': 'No load with this load_id exists' });
-            } else {
+            } 
+            else {
+                
+                // Prevent different owners from handle loads they don't own.
+                if(load[0].owner_id !== ownerId){
+                    return res.status(403).json({ 'Error': 'Forbidden Access!' });
+                }
                 // Return the 0th element which is the load with this id
                 // Also creates self link when responding to client. 
                 load[0].self = req.protocol + "://" + req.get('host') + req.baseUrl + "/" + req.params.id
@@ -152,13 +205,21 @@ router.get('/', function(req, res){
 
 /**
  * Add a Load */ 
- router.post('/', function(req, res){
+ router.post('/', async function(req, res){
 
-    if(req.body?.volume === undefined || req.body?.item === undefined || req.body?.creation_date === undefined){
+    const [is_valid, ownerId] = await is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
+
+    if(req.body?.volume === undefined || req.body?.item === undefined || req.body?.creation_date === undefined ||
+        req.body?.volume === null || req.body?.item === null || req.body?.creation_date === null){
         return res.status(400).json( {"Error": "The request object is missing at least one of the required attributes"});
     }
 
-    put_load(req.body.volume, req.body.item, req.body.creation_date)
+    put_load(req.body.volume, req.body.item, req.body.creation_date, null, ownerId)
     .then( key => {res.status(201)
         .send({
             "id": key.id,
@@ -166,6 +227,7 @@ router.get('/', function(req, res){
             "item": req.body.item,
             "creation_date": req.body.creation_date,
             "carrier": null,
+            "owner_id": ownerId,
             "self": req.protocol + "://" + req.get('host') + req.baseUrl + "/" + key.id
         })
     });
