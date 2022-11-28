@@ -234,6 +234,83 @@ router.get('/', function(req, res){
 });
 
 /**
+ * Update a Load */ 
+ router.patch('/:load_id', async function(req, res){
+
+    const [is_valid, ownerId] = await is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
+
+    let attributeNum = 0;
+    let [volume, item, creation_date] = [null, null, null];
+
+    // Getting the volume if not undefined or null
+    if(req.body?.volume !== undefined && req.body?.volume !== null){
+        volume = req.body.volume;
+        attributeNum++;
+    }
+
+    // Getting the item if not undefined or null
+    if(req.body?.item !== undefined && req.body?.item !== null){
+        item = req.body.item;
+        attributeNum++;
+    }
+
+    // Getting the creation_date if not undefined or null
+    if(req.body?.creation_date !== undefined && req.body?.creation_date !== null){
+        creation_date = req.body.creation_date;
+        attributeNum++;
+    }
+
+    // If no attributes are added, error is returned. 
+    if(attributeNum <= 0){
+        return res.status(400).json( {"Error": "The request object is missing at least one of the required attributes"});
+    }
+
+    const requestedLoad = await get_load(req.params.load_id);
+
+    // check for valid load. 
+    if (requestedLoad?.[0] === undefined || requestedLoad?.[0] === null){
+
+        // The 0th element is undefined. This means there is no Load with this id
+        return res.status(404).json({ 'Error': 'No load with this load_id exists' });
+    } 
+
+    // Prevents One user from accessing another user's load. -- Implement in Postman
+    if(requestedLoad[0]?.owner_id !== ownerId){
+        return res.status(403).json({ 'Error': 'Forbidden Access!' });
+    }
+
+    // Attributes that are null are replaced by original values. 
+    if(volume === null){
+        volume = requestedLoad[0].volume;
+    }
+    if(item === null){
+        item = requestedLoad[0].item;
+    }
+    if(creation_date === null){
+        creation_date = requestedLoad[0].creation_date;
+    }
+
+    put_load(volume, item, creation_date, requestedLoad[0].carrier, ownerId, req.params.load_id)
+    .then( key => {res.status(200)
+        .send({
+            "id": key.id,
+            "volume": volume,
+            "item": item,
+            "creation_date": creation_date,
+            "carrier": requestedLoad[0].carrier,
+            "owner_id": ownerId,
+            "self": req.protocol + "://" + req.get('host') + req.baseUrl + "/" + key.id
+        })
+    });
+
+});
+
+/**
  * Delete a Load. */
  router.delete('/:load_id', async function(req, res){ 
     

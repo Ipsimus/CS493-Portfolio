@@ -321,7 +321,7 @@ router.patch('/:boat_id', async function (req, res){
 
     // Patch the boat for all attributes except the loads. 
     put_boat(name, type, length, loadsArr, ownerId, requestedBoat[0].id)
-    .then( key => {res.status(201)
+    .then( key => {res.status(200)
         .send({
             "id": key.id,
             "name": name,
@@ -332,7 +332,6 @@ router.patch('/:boat_id', async function (req, res){
             "self": req.protocol + "://" + req.get('host') + req.baseUrl + "/" + key.id
         })
     });
-
 })
 
 /**
