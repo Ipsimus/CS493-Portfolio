@@ -335,12 +335,19 @@ router.patch('/:boat_id', async function (req, res){
 })
 
 /**
- * Load is Assigned to a Boat.
+ * Load is Assigned to a Boat -- Done.
  */
  router.put('/:boat_id/loads/:load_id', async function (req, res){
 
     // console.log(`slip id is: ${req.params.load_id}`);
     // console.log(`boat id is: ${req.params.boat_id}`);
+
+    const [is_valid, ownerId] = await loadsController.is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
     
     // Citation 1: Use of Promises -- See server.js file for full citation. 
     // Promise.all() allows async request to be sent together.
@@ -359,17 +366,20 @@ router.patch('/:boat_id', async function (req, res){
             // The 0th element is undefined. This means there is no load/boat with this id
             res.status(404).json({ 'Error': 'The specified boat and/or load does not exist' });
         }
+        else if(load[0]?.owner_id !== ownerId || boat[0]?.owner_id !== ownerId){
+            res.status(403).json({ 'Error': 'Forbidden Access!' });
+        }
         else if(load[0]?.carrier !== null){
             // If load property carrier is NOT undefined, then the load is already assigned.
-            res.status(403).json({ 'Error': 'The load is already loaded on another boat' });
+            res.status(403).json({ 'Error': 'The load is already assigned' });
         }
         else{
             
             load[0].carrier = {"id": req.params.boat_id, "name": boat[0].name};
-            boat[0].loads.push( {"id": load[0].id} );
+            boat[0].loads.push( {"id": load[0].id, "item": load[0].item} );
 
             Promise.all([
-                loadsController.put_load(load[0].volume, load[0].item, load[0].creation_date, load[0].carrier, req.params.load_id),
+                loadsController.put_load(load[0].volume, load[0].item, load[0].creation_date, load[0].carrier, load[0].owner_id, req.params.load_id),
                 put_boat(boat[0].name, boat[0].type, boat[0].length, boat[0].loads, boat[0].owner_id, req.params.boat_id)
             ])
             // res.status(204).send(), if send() is not used, a connection error occurs.
@@ -383,19 +393,11 @@ router.patch('/:boat_id', async function (req, res){
  */
 router.delete('/:boat_id/loads/:load_id', async function(req, res){ 
 
-    // Check for authorization header
-    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
-        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
-    }
+    const [is_valid, ownerId] = await loadsController.is_valid_request(req, res);
 
-    // Split makes an array of the words bearer and the tokenId itself. 
-    const tokenId = req.headers.authorization.split(" ")[1];
-
-    let [isValid, ownerId, errorMessage] = await authController.verify(tokenId);
-
-    // A failed verification will return 401 status and the error message.
-    if(!isValid){
-        return res.status(401).json( {"Error": errorMessage} );
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
     }
     
     // Get boat and load based on their respective ids. 
@@ -414,18 +416,16 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
         res.status(404).json({"Error": "No boat with this boat_id is loaded with the load with this load_id"});
         return;
     }
-
-    // Prevents One user from accessing another user's boat. -- Implement in Postman
-    
+    // Prevents One user from accessing another user's boat or load. -- Implement in Postman
+    if(load[0]?.owner_id !== ownerId || boat[0]?.owner_id !== ownerId){
+        return res.status(403).json({ 'Error': 'Forbidden Access!' });
+    }
 
     // Remove load from boat, and carrier from load. 
-    
-    await remove_load(boat[0], load[0]),
-    await loadsController.remove_carrier(load[0])
-    
-    
-    res.status(204).send()
-    
+    Promise.all([remove_load(boat[0], load[0]), loadsController.remove_carrier(load[0])])
+    .then(
+        res.status(204).send()
+    )
 });
 
 /**
@@ -433,19 +433,11 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
  */
  router.delete('/:boat_id', async function(req, res){ 
 
-    // Check for authorization header
-    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
-        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
-    }
+    const [is_valid, ownerId] = await loadsController.is_valid_request(req, res);
 
-    // Split makes an array of the words bearer and the tokenId itself. 
-    const tokenId = req.headers.authorization.split(" ")[1];
-
-    let [isValid, ownerId, errorMessage] = await authController.verify(tokenId);
-
-    // A failed verification will return 401 status and the error message.
-    if(!isValid){
-        return res.status(401).json( {"Error": errorMessage} );
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
     }
     
     // Get boat and load based on their respective ids. 
@@ -462,15 +454,21 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
         return res.status(403).json({ 'Error': 'Forbidden Access!' });
     }
     
+    // All promises to be resolved.
+    const promiseArr = [];
+    
     // Remove carrier from every load that the boat holds. 
     for(const aLoad of boat[0].loads){
-        await loadsController.remove_carrier(aLoad);
+        promiseArr.push(loadsController.remove_carrier(aLoad));
     }
-
+    
     // Delete Boat from Datastore.
-    await delete_boat(boat[0].id);
+    promiseArr.push(delete_boat(boat[0].id));
 
-    res.status(204).send()
+    Promise.all(promiseArr)
+    .then(
+        res.status(204).send()
+    )
 });
 
 /* ------------- End Controller Functions ------------- */

@@ -57,7 +57,7 @@ async function remove_carrier(load){
     const new_load = results[0];
 
     if(new_load !== undefined || new_load !== null){
-        await put_load(new_load.volume, new_load.item, new_load.creation_date, null, new_load.id);
+        await put_load(new_load.volume, new_load.item, new_load.creation_date, null, new_load.owner_id, new_load.id);
     }
     return;
 }
@@ -95,8 +95,8 @@ function delete_load(id){
 
 /**
  * 
- * @param req 
- * @param res 
+ * @param req - request object
+ * @param res - response object
  * @returns [bool, null/ownerId] 
  * If the request is valid an array with index 0 of true is returned, 
  * along with the ownerId of the validated individual in index 1. 
@@ -355,3 +355,4 @@ module.exports.put_load = put_load;
 module.exports.delete_load = delete_load;
 module.exports.remove_carrier = remove_carrier;
 module.exports.get_entity = get_entity;
+module.exports.is_valid_request = is_valid_request;
