@@ -8,7 +8,7 @@ const authController = require('./authController');
 const datastore = ds.datastore;
 
 const LOAD = "Load";
-const PAGELIMIT = 3;
+const PAGELIMIT = 5;
 
 router.use(bodyParser.json());
 
@@ -64,8 +64,8 @@ async function remove_carrier(load){
 
 /**
  * Returns an Object with pagination results for any entity/Kind. */
-function get_entity(req, KIND){
-    var q = datastore.createQuery(KIND).limit(PAGELIMIT);
+function get_entity(req, KIND, ownerId){
+    var q = datastore.createQuery(KIND).limit(PAGELIMIT).filter('owner_id', '=', ownerId);
     const results = {};
     var prev;
     if(Object.keys(req.query).includes("cursor")){
@@ -135,8 +135,16 @@ async function is_valid_request(req, res){
 
 /**
  * Gets all Loads with Pagination. */
-router.get('/', function(req, res){
-    get_entity(req, LOAD)
+router.get('/', async function(req, res){
+
+    const [is_valid, ownerId] = await is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
+
+    get_entity(req, LOAD, ownerId)
 	.then( (allLoads) => {
         
         // console.log(allLoads);
@@ -156,7 +164,14 @@ router.get('/', function(req, res){
         // Copy into new object where items is replaced by loads. 
         Object.keys(allLoads).forEach(key => {
             if (key === 'items'){
-                returnObj.loads = allLoads[key];
+                const loads = [];
+                // Only loads that match the owner are added.
+                for(const load of allLoads.items){
+                    if(load.owner_id === ownerId){
+                        loads.push(load);
+                    }
+                }
+                returnObj.loads = loads;
             }
             else{
                 returnObj[key] = allLoads[key];
@@ -313,6 +328,13 @@ router.get('/', function(req, res){
 /**
  * Delete a Load. */
  router.delete('/:load_id', async function(req, res){ 
+
+    const [is_valid, ownerId] = await is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
     
     // Get load based on their respective ids. 
     const load = await get_load(req.params.load_id);
@@ -322,10 +344,14 @@ router.get('/', function(req, res){
         res.status(404).json({"Error": "No load with this load_id exists"});
         return;
     }
+    // Check if owner is authorized.
+    if(load[0].owner_id !== ownerId){
+        return res.status(403).json({ 'Error': 'Forbidden Access!' });
+    }
 
     const promiseArr = [];
 
-    if(load[0].carrier?.id !== undefined){
+    if(load[0].carrier?.id !== undefined && load[0].carrier?.id !== null){
 
         const boat = await boatsController.get_boat(load[0].carrier.id);
 
@@ -334,7 +360,7 @@ router.get('/', function(req, res){
             promiseArr.push(boatsController.remove_load(boat[0], load[0]));    
         }
     }
-    
+
     // Delete load from Datastore.
     promiseArr.push(delete_load(load[0].id));
 

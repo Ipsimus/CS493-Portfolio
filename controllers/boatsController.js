@@ -76,12 +76,19 @@ function delete_boat(id){
 
 /**
  * Gets all Boats with Pagination. */
- router.get('/', function(req, res){
-    loadsController.get_entity(req, BOAT)
+ router.get('/', async function(req, res){
+    
+    const [is_valid, ownerId] = await loadsController.is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
+    
+    // Get pagination results object called allBoats. 
+    loadsController.get_entity(req, BOAT, ownerId)
 	.then( (allBoats) => {
         
-        // console.log(allLoads);
-
         allBoats.items.forEach(boat => {
             
             // Also creates self link when responding to client. 
@@ -93,11 +100,23 @@ function delete_boat(id){
             }
         });
 
+        // The return object is a filtered allBoats.
         const returnObj = {}
-
+        // Keys are copied.
         Object.keys(allBoats).forEach(key => {
+
+            // console.log(allBoats)
+            //The items key has all the boats stored in it from allBoats.
             if (key === 'items'){
-                returnObj.boats = allBoats[key];
+
+                const boats = [];
+                // Only the boats that match the owner are added. 
+                for(const boat of allBoats.items){
+                    if(boat.owner_id === ownerId){
+                        boats.push(boat);
+                    }
+                }
+                returnObj.boats = boats;
             }
             else{
                 returnObj[key] = allBoats[key];
@@ -389,7 +408,7 @@ router.patch('/:boat_id', async function (req, res){
 });
 
 /**
- * Remove a Load.
+ * Unassign a Load.
  */
 router.delete('/:boat_id/loads/:load_id', async function(req, res){ 
 
@@ -422,7 +441,7 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
     }
 
     // Remove load from boat, and carrier from load. 
-    Promise.all([remove_load(boat[0], load[0]), loadsController.remove_carrier(load[0])])
+    await Promise.all([remove_load(boat[0], load[0]), loadsController.remove_carrier(load[0])])
     .then(
         res.status(204).send()
     )
@@ -465,7 +484,7 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
     // Delete Boat from Datastore.
     promiseArr.push(delete_boat(boat[0].id));
 
-    Promise.all(promiseArr)
+    await Promise.all(promiseArr)
     .then(
         res.status(204).send()
     )
