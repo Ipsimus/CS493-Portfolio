@@ -23,7 +23,7 @@ const LOCALHOST_PROFILE_URL = "http://localhost:8080/profile";
 const SCOPE_API_URL = 'https://www.googleapis.com/auth/userinfo.profile';
 
 // ******************** SELECT WHETHER TESTING OR NOT ********************
-const IS_TEST = true;
+const IS_TEST = false;
 
 // Get client credentials form client_credentials.json
 const credentials = JSON.parse(fs.readFileSync(CREDENTIAL_LOCATION, "utf8"));
@@ -254,6 +254,23 @@ router.get('/profile', async (req, res) => {
     }
   )
 })
+
+// ******************** CATCH-ALL Route ******************** 
+
+// /**
+//  * Catch all for GET route.*/
+//  router.get("*", (req, res) => {
+//   // handle 404 - Basically Unallowed Methods. 
+//   return res.status(404).json({"Error": "Could not find that resource"});
+// });
+
+// /**
+//  * Catch all unsupported routes*/
+//  router.all("*", (req, res) => {
+//   // handle 405 - Unallowed Methods. 
+//   res.setHeader('Access-Control-Allow-Methods', 'GET');
+//   return res.status(405).json({"Error": "This Method is not allowed"});
+// });
 
 module.exports = router;
 

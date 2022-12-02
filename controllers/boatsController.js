@@ -15,6 +15,7 @@ router.use(bodyParser.json());
 
 /* ------------- Begin Lodging Model Functions ------------- */
 function get_boat(id) {
+    
     const key = datastore.key([BOAT, parseInt(id, 10)]);
     return datastore.get(key).then((entity) => {
         if (entity[0] === undefined || entity[0] === null) {
@@ -151,6 +152,12 @@ function delete_boat(id){
     if(!isValid){
         return res.status(401).json( {"Error": errorMessage} );
     }
+
+    console.log(req.params?.boat_id)
+    // Check the boat_id if null or undefined 
+    if(req.params?.boat_id === undefined || req.params?.boat_id === null){
+        return res.status(404).json({"Error": "Could not find that resource"});
+    }
     
     get_boat(req.params.boat_id)
     .then(boat => {
@@ -174,19 +181,30 @@ function delete_boat(id){
 
             res.status(200).json(boat[0]);
         }
-    });
+    })
 });
 
 /**
  * Gets all Loads from a Boat with a given ID. */
  router.get('/:id/loads', async function (req, res){
+
+    const [is_valid, ownerId] = await loadsController.is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
     
     const boat = await get_boat(req.params.id);
     
     if (boat[0] === undefined || boat[0] === null) {
         // The 0th element is undefined. This means there is no boat with this id
         res.status(404).json({ 'Error': 'No boat with this boat_id exists' });
-    } else {
+    } 
+    else if(boat[0]?.owner_id !== ownerId){
+        res.status(403).json({ 'Error': 'Forbidden Access!' });
+    }
+    else {
         // Return the 0th element which is the boat with this id
         // Also creates self link when responding to client. 
         boat[0].self = req.protocol + "://" + req.get('host') + req.baseUrl + "/" + req.params.id;
@@ -256,8 +274,93 @@ router.post('/', async function(req, res){
 });
 
 /**
- * A Boat is Patched -- Done
- */
+ * A Boat is PUT Updated*/
+ router.put('/:boat_id', async function (req, res){
+ 
+    // Checks to see if client can accept JSON as a response.
+    const accepts = req.accepts('application/json');
+    if(!accepts){
+        return res.status(406).json({"Error": "Not Acceptable"});
+    }
+
+    // Check for authorization header
+    if(req.headers?.authorization === undefined || req.headers?.authorization === null){
+        return res.status(401).json( {"Error": "No authorization bearer token was provided!"});
+    }
+
+    let attributeNum = 0;
+    let [name, type, length] = [null, null, null];
+
+    // Getting the name if not undefined or null
+    if(req.body?.name !== undefined && req.body?.name !== null){
+        name = req.body.name;
+        attributeNum++;
+    }
+
+    // Getting the type if not undefined or null
+    if(req.body?.type !== undefined && req.body?.type !== null){
+        type = req.body.type;
+        attributeNum++;
+    }
+
+    // Getting the length if not undefined or null
+    if(req.body?.length !== undefined && req.body?.length !== null){
+        length = req.body.length;
+        attributeNum++;
+    }
+
+    // If no attributes are added, error is returned. 
+    if(attributeNum < 3){
+        return res.status(400).json( {"Error": "The request object is missing at least one of the required attributes"});
+    }
+
+    // Split makes an array of the words bearer and the tokenId itself. 
+    const tokenId = req.headers.authorization.split(" ")[1];
+
+    const [[isValid, ownerId, errorMessage], requestedBoat] = await Promise.all([authController.verify(tokenId), get_boat(req.params.boat_id)])
+    // A failed verification will return 401 status and the error message.
+    
+    if(!isValid){
+        return res.status(401).json( {"Error": errorMessage} );
+    }
+
+    // check for valid boat. 
+    if (requestedBoat?.[0] === undefined || requestedBoat?.[0] === null){
+
+        // The 0th element is undefined. This means there is no boat with this id
+        return res.status(404).json({ 'Error': 'No boat with this boat_id exists' });
+    } 
+
+    // Prevents One user from accessing another user's boat. -- Implement in Postman
+    if(requestedBoat[0]?.owner_id !== ownerId){
+        return res.status(403).json({ 'Error': 'Forbidden Access!' });
+    }
+
+    const loadsArr = [];
+    
+    // Copy original boat loads
+    for(const load of requestedBoat[0].loads){
+        // !!!!! You need to add a self link to all loads represented !!!!!
+        loadsArr.push(load);
+    }
+
+    // Patch the boat for all attributes except the loads. 
+    put_boat(name, type, length, loadsArr, ownerId, requestedBoat[0].id)
+    .then( key => {res.status(200)
+        .send({
+            "id": key.id,
+            "name": name,
+            "type": type,
+            "length": length,
+            "loads": loadsArr,
+            "owner_id": ownerId,
+            "self": req.protocol + "://" + req.get('host') + req.baseUrl + "/" + key.id
+        })
+    });
+});
+
+/**
+ * A Boat is Patched -- Done*/
 router.patch('/:boat_id', async function (req, res){
 
     // Checks to see if client can accept JSON as a response.
@@ -488,6 +591,51 @@ router.delete('/:boat_id/loads/:load_id', async function(req, res){
     .then(
         res.status(204).send()
     )
+});
+
+// ******************** CATCH-ALL Route ******************** 
+
+/**
+ * Catch all for GET route.*/
+ router.get("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for POST route.*/
+ router.post("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for PUT route.*/
+ router.put("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for PATCH route.*/
+ router.patch("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for DELETE route.*/
+ router.delete("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all unsupported routes*/
+ router.all("*", (req, res) => {
+    // handle 405 - Unallowed Methods. 
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
+    return res.status(405).json({"Error": "This Method is not allowed"});
 });
 
 /* ------------- End Controller Functions ------------- */

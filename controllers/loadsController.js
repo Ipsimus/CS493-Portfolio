@@ -250,6 +250,72 @@ router.get('/', async function(req, res){
 
 /**
  * Update a Load */ 
+ router.put('/:load_id', async function(req, res){
+
+    const [is_valid, ownerId] = await is_valid_request(req, res);
+
+    // Invalid requests are terminated.
+    if(!is_valid){
+        return;
+    }
+
+    let attributeNum = 0;
+    let [volume, item, creation_date] = [null, null, null];
+
+    // Getting the volume if not undefined or null
+    if(req.body?.volume !== undefined && req.body?.volume !== null){
+        volume = req.body.volume;
+        attributeNum++;
+    }
+
+    // Getting the item if not undefined or null
+    if(req.body?.item !== undefined && req.body?.item !== null){
+        item = req.body.item;
+        attributeNum++;
+    }
+
+    // Getting the creation_date if not undefined or null
+    if(req.body?.creation_date !== undefined && req.body?.creation_date !== null){
+        creation_date = req.body.creation_date;
+        attributeNum++;
+    }
+
+    // If any attribute is missing, an error is returned. 
+    if(attributeNum < 3){
+        return res.status(400).json( {"Error": "The request object is missing at least one of the required attributes"});
+    }
+
+    const requestedLoad = await get_load(req.params.load_id);
+
+    // check for valid load. 
+    if (requestedLoad?.[0] === undefined || requestedLoad?.[0] === null){
+
+        // The 0th element is undefined. This means there is no Load with this id
+        return res.status(404).json({ 'Error': 'No load with this load_id exists' });
+    } 
+
+    // Prevents One user from accessing another user's load. -- Implement in Postman
+    if(requestedLoad[0]?.owner_id !== ownerId){
+        return res.status(403).json({ 'Error': 'Forbidden Access!' });
+    }
+
+    put_load(volume, item, creation_date, requestedLoad[0].carrier, ownerId, req.params.load_id)
+    .then( key => {res.status(200)
+        .send({
+            "id": key.id,
+            "volume": volume,
+            "item": item,
+            "creation_date": creation_date,
+            "carrier": requestedLoad[0].carrier,
+            "owner_id": ownerId,
+            "self": req.protocol + "://" + req.get('host') + req.baseUrl + "/" + key.id
+        })
+    });
+
+});
+
+/**
+ * Update a Load */ 
  router.patch('/:load_id', async function(req, res){
 
     const [is_valid, ownerId] = await is_valid_request(req, res);
@@ -369,6 +435,51 @@ router.get('/', async function(req, res){
     .then(
         res.status(204).send()
     );
+});
+
+// ******************** CATCH-ALL Route ******************** 
+
+/**
+ * Catch all for GET route.*/
+ router.get("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for POST route.*/
+ router.post("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for PUT route.*/
+ router.put("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for PATCH route.*/
+ router.patch("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all for DELETE route.*/
+ router.delete("*", (req, res) => {
+    // handle 404 - Basically Unallowed Methods. 
+    return res.status(404).json({"Error": "Could not find that resource"});
+});
+
+/**
+ * Catch all unsupported methods*/
+ router.all("*", (req, res) => {
+    // handle 405 - Unallowed Methods. 
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE');
+    return res.status(405).json({"Error": "This Method is not allowed"});
 });
 
 /* ------------- End Controller Functions ------------- */
