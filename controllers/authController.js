@@ -42,7 +42,7 @@ const oauth2Client = new google.auth.OAuth2(
   redirectUrl
 );
 
-// Citation #1 - Authenticate with a backend server
+// Citation 7: Authenticate with a backend server
 // OAuth - Verify ID Token 
 console.log(`this id is: ${clientID}`);
 const {OAuth2Client} = require('google-auth-library');
@@ -138,20 +138,13 @@ router.get('/redirect', async (req, res) => {
 
     console.log('********** redirect entered **********\n')
   
-    /*
-    Title: Using OAuth 2.0 for Web Server Applications
-    Author: Google
-    Date: 09/13/2022
-    Date accessed: 11/02/2022
-    URL: https://developers.google.com/identity/protocols/oauth2/web-server#redirecting
-    Notes: Redirection to Google's Auth2.0
-    */
     // Generates a 10 digit interger as a string to represent the state.
     // const stateString = (get_rand_int(1_000_000_000, 9_999_999_999)).toString()
   
     // State stored in Datastore.
     // await post_state(stateString);
     
+    // Citation 8: Authenticate with a backend server
     // Generate a url that asks permissions for the Profile Scope.
     const authorizationUrl = oauth2Client.generateAuthUrl( {
       //Offline (gets refresh token) -- the same as when done manually. 

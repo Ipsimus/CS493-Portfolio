@@ -60,3 +60,36 @@ app.listen(PORT, () => {
 // Medium: Video
 // URL: https://www.youtube.com/watch?v=1aXZQcG2Y6I&list=PLYqkl7FT2ig8QES9nkovc04GrnRJAUhEb&index=1&t=2836s&ab_channel=RaddyTheBrand
 // Notes: Refresher for setting up routerFile and Controllers.
+
+// Citation 5: Datastore Queries
+// Title: Datastore Queries
+// Author: Google
+// Date: 11/30/2022
+// Date accessed: 12/01/2022
+// URL: https://cloud.google.com/datastore/docs/concepts/queries#datastore-datastore-property-filter-nodejs
+// Notes: For filtering out certain properities from a queiried entity. 
+
+// Citation 6: OSU Datastore functions for data manipulation.
+// Title: OSU CS-493
+// Author: Oregon State University
+// Date: N/A
+// Date accessed: 11/01/2022
+// URL: CANVAS website.
+// Notes: For functions that show data manipulation of datastore information.
+
+// Citation 7: Authenticate with a backend server
+// Title: Authenticate with a backend server
+// Author: Google
+// Date: 10/18/2022
+// Date accessed: 11/15/2022
+// URL: https://developers.google.com/identity/sign-in/web/backend-auth
+// Notes: For using google client library to validate an ID token.
+
+// Citation 8: Authenticate with a backend server
+// Title: Using OAuth 2.0 for Web Server Applications
+// Author: Google
+// Date: 09/13/2022
+// Date accessed: 11/02/2022
+// URL: https://developers.google.com/identity/protocols/oauth2/web-server#redirecting
+// Notes: Redirection to Google's Auth2.0
+    

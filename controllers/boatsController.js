@@ -12,7 +12,7 @@ const BOAT = "Boat";
 router.use(bodyParser.json());
 
 
-
+// Citation 6: OSU Datastore functions for data manipulation.
 /* ------------- Begin Lodging Model Functions ------------- */
 function get_boat(id) {
     

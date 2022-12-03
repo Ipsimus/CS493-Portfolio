@@ -12,7 +12,7 @@ const PAGELIMIT = 5;
 
 router.use(bodyParser.json());
 
-
+// Citation 6: OSU Datastore functions for data manipulation.
 /* ------------- Begin Datastore Model Functions ------------- */
 
 /**
@@ -65,6 +65,7 @@ async function remove_carrier(load){
 /**
  * Returns an Object with pagination results for any entity/Kind. */
 function get_entity(req, KIND, ownerId){
+    // Citation 5: Datastore Queries
     var q = datastore.createQuery(KIND).limit(PAGELIMIT).filter('owner_id', '=', ownerId);
     const results = {};
     var prev;
